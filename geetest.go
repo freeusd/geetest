@@ -3,7 +3,6 @@ package geetest
 import (
 	"crypto/md5"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/hashicorp/go-multierror"
@@ -16,7 +15,7 @@ const apiHost = "api.geetest.com"
 type Geetest struct {
 	captchaID  string
 	privateKey string
-	scheme     string
+	apiServer  string
 }
 
 // New constructs and returns a Geetest
@@ -29,7 +28,7 @@ func New(captchaID, privateKey string, enableHTTPS bool) Geetest {
 	return Geetest{
 		captchaID:  captchaID,
 		privateKey: privateKey,
-		scheme:     scheme,
+		apiServer:  fmt.Sprintf("%s://%s", scheme, apiHost),
 	}
 }
 
@@ -38,7 +37,10 @@ func (g Geetest) CaptchaID() string { return g.captchaID }
 
 // Register returns challenge get from api server
 func (g Geetest) Register() (string, error) {
-	_, body, errs := gorequest.New().Get(g.registrationURL()).Timeout(time.Second * 2).End()
+	query := struct {
+		CaptchaID string `json:"gt"`
+	}{g.captchaID}
+	_, body, errs := gorequest.New().Get(fmt.Sprintf("%s/register.php", g.apiServer)).Query(query).Timeout(time.Second * 2).End()
 	if errs != nil {
 		return "", &multierror.Error{Errors: errs}
 	}
@@ -53,32 +55,15 @@ func (g Geetest) Validate(challenge, validate, seccode string) (bool, error) {
 		return false, nil
 	}
 
-	data := fmt.Sprintf(`{"seccode":"%s"}`, seccode)
-	_, body, errs := gorequest.New().Post(g.validationURL()).Query(data).End()
+	query := struct {
+		Seccode string `json:"seccode"`
+	}{seccode}
+	_, body, errs := gorequest.New().Post(fmt.Sprintf("%s/validate.php", g.apiServer)).Query(query).End()
 	if errs != nil {
 		return false, &multierror.Error{Errors: errs}
 	}
 
 	return hexmd5(seccode) == body, nil
-}
-
-func (g Geetest) registrationURL() string {
-	u := url.URL{}
-	u.Scheme = g.scheme
-	u.Host = apiHost
-	u.Path = "register.php"
-	query := u.Query()
-	query.Set("gt", g.captchaID)
-	u.RawQuery = query.Encode()
-	return u.String()
-}
-
-func (g Geetest) validationURL() string {
-	u := url.URL{}
-	u.Scheme = g.scheme
-	u.Host = apiHost
-	u.Path = "validate.php"
-	return u.String()
 }
 
 func hexmd5(data string) string {
