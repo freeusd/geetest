@@ -15,7 +15,8 @@ const apiHost = "api.geetest.com"
 type Geetest struct {
 	captchaID  string
 	privateKey string
-	apiServer  string
+
+	registerURL, validateURL string
 }
 
 // New constructs and returns a Geetest
@@ -24,11 +25,14 @@ func New(captchaID, privateKey string, enableHTTPS bool) Geetest {
 	if enableHTTPS {
 		scheme = "https"
 	}
+	apiServer := fmt.Sprintf("%s://%s", scheme, apiHost)
 
 	return Geetest{
 		captchaID:  captchaID,
 		privateKey: privateKey,
-		apiServer:  fmt.Sprintf("%s://%s", scheme, apiHost),
+
+		registerURL: fmt.Sprintf("%s/register.php", apiServer),
+		validateURL: fmt.Sprintf("%s/validate.php", apiServer),
 	}
 }
 
@@ -40,7 +44,7 @@ func (g Geetest) Register() (string, error) {
 	query := struct {
 		CaptchaID string `json:"gt"`
 	}{g.captchaID}
-	_, body, errs := gorequest.New().Get(fmt.Sprintf("%s/register.php", g.apiServer)).Query(query).Timeout(time.Second * 2).End()
+	_, body, errs := gorequest.New().Get(g.registerURL).Query(query).Timeout(time.Second * 2).End()
 	if errs != nil {
 		return "", &multierror.Error{Errors: errs}
 	}
@@ -58,7 +62,7 @@ func (g Geetest) Validate(challenge, validate, seccode string) (bool, error) {
 	query := struct {
 		Seccode string `json:"seccode"`
 	}{seccode}
-	_, body, errs := gorequest.New().Post(fmt.Sprintf("%s/validate.php", g.apiServer)).Query(query).End()
+	_, body, errs := gorequest.New().Post(g.validateURL).Query(query).End()
 	if errs != nil {
 		return false, &multierror.Error{Errors: errs}
 	}
